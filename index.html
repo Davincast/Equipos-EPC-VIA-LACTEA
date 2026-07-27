@@ -41,24 +41,8 @@
 </head>
 <body class="bg-bg text-ink h-screen overflow-hidden flex flex-col">
 
-<!-- LOADER SCREEN -->
-<div id="loaderScreen" class="h-full flex flex-col items-center justify-center px-4">
-  <div class="max-w-md w-full text-center">
-    <h1 class="text-2xl font-bold text-ink mb-2">Informe Ejecutivo de Equipos</h1>
-    <p class="text-sub text-xs mb-6">Carga el archivo Excel/CSV para generar el panel en una sola página.</p>
-
-    <label id="dropZone" for="fileInput" class="block border-2 border-dashed border-border rounded-xl bg-panel hover:border-cyan/60 transition-all p-8 cursor-pointer">
-      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
-      <div class="text-sm text-ink font-semibold">Selecciona o arrastra tu archivo</div>
-      <div class="text-xs text-sub mt-1">.xlsx, .xls, .csv</div>
-    </label>
-
-    <div id="loadError" class="hidden mt-3 text-xs text-red bg-red/10 border border-red/30 rounded p-2"></div>
-  </div>
-</div>
-
 <!-- DASHBOARD (1 SINGLE PAGE, NO SCROLL EXTERNO) -->
-<div id="dashboard" class="hidden h-full w-full flex flex-col p-2 gap-2 overflow-hidden">
+<div id="dashboard" class="h-full w-full flex flex-col p-2 gap-2 overflow-hidden">
 
   <!-- Header / Filtro -->
   <header class="flex items-center justify-between bg-panel2 border border-border px-3 py-1.5 rounded-lg flex-shrink-0">
@@ -71,7 +55,6 @@
     <div class="flex items-center gap-2">
       <label for="filterMes" class="text-xs text-sub font-medium">Filtrar por Mes:</label>
       <select id="filterMes" class="text-xs bg-panel border border-border rounded px-2 py-1 text-ink focus:outline-none focus:border-cyan/60"></select>
-      <button id="resetBtn" class="text-xs px-2 py-1 rounded border border-border bg-panel hover:border-cyan/60 text-sub transition-colors">Cambiar archivo</button>
     </div>
   </header>
 
@@ -127,7 +110,7 @@
     </div>
   </section>
 
-  <!-- Fila 2 (Flexible): Donut + Tabla Cantidad Equipos + Diagnóstico de Varados -->
+  <!-- Fila 2 (Flexible) -->
   <section class="grid grid-cols-1 md:grid-cols-10 gap-2 flex-1 min-h-0">
     <div class="md:col-span-4 bg-panel border border-border rounded-lg p-2 flex flex-col min-h-0 shadow-sm">
       <h3 class="font-semibold text-xs text-ink mb-1 flex-shrink-0">Distribución de Horas Totales</h3>
@@ -180,7 +163,7 @@
     </div>
   </section>
 
-  <!-- Fila 3 (Flexible): Resumen por Clase de Equipo (ancho completo) -->
+  <!-- Fila 3 (Flexible) -->
   <section class="bg-panel border border-border rounded-lg p-2 flex flex-col flex-1 min-h-0 shadow-sm">
     <h3 class="font-semibold text-xs text-ink mb-1 flex-shrink-0">Resumen por Clase de Equipo</h3>
     <div class="flex-1 relative min-h-0">
@@ -196,65 +179,25 @@
   const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const COLORS = { prod:'#0891B2', disp:'#059669', varado:'#EA580C' };
 
+  // =========================================================================
+  // PEGA AQUÍ LOS DATOS EXTRAÍDOS DE TU ARCHIVO "Libro1" DE EXCEL
+  // =========================================================================
+  const DATOS_EMBEDIDOS = [
+    { "Descripción Centro": "EPC - VIA LACTEA", "Equipo": "EQ-001", "Clase": "Excavadora", "des_tipo": "Producción", "horas": 120, "fecha": "2026-07-01", "notas": "" },
+    { "Descripción Centro": "EPC - VIA LACTEA", "Equipo": "EQ-002", "Clase": "Volqueta", "des_tipo": "Varado", "horas": 45, "fecha": "2026-07-02", "notas": "Fallo en sistema hidráulico" },
+    { "Descripción Centro": "EPC - VIA LACTEA", "Equipo": "EQ-003", "Clase": "Cargador", "des_tipo": "Disponible", "horas": 80, "fecha": "2026-07-03", "notas": "" }
+  ];
+
   let RAW = [];
   let chartDonut = null;
   let chartClase = null;
-  const mesLabels = {}; // mesKey -> "Julio 26"
+  const mesLabels = {};
 
   const $ = (id) => document.getElementById(id);
-
   Chart.register(ChartDataLabels);
 
   function normalizeStr(v){
-    return String(v ?? '')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function showLoadError(msg){
-    const el = $('loadError');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-  }
-
-  function clearLoadError(){
-    $('loadError').textContent = '';
-    $('loadError').classList.add('hidden');
-  }
-
-  const dropZone = $('dropZone');
-  const fileInput = $('fileInput');
-
-  ['dragenter','dragover'].forEach(evt => dropZone.addEventListener(evt, e => e.preventDefault()));
-  dropZone.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
-  fileInput.addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f); });
-
-  $('resetBtn').addEventListener('click', () => {
-    $('dashboard').classList.add('hidden');
-    $('loaderScreen').classList.remove('hidden');
-    clearLoadError();
-    fileInput.value = '';
-  });
-
-  window.addEventListener('resize', () => {
-    if (!$('dashboard').classList.contains('hidden')) render();
-  });
-
-  function handleFile(file){
-    clearLoadError();
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
-        processData(json);
-      } catch (err) {
-        showLoadError('Error procesando el archivo. Verifica que sea un Excel/CSV válido.');
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
   function parseHoras(v){
@@ -266,10 +209,6 @@
 
   function parseFecha(v){
     if (v instanceof Date && !isNaN(v)) return v;
-    if (typeof v === 'number' && XLSX.SSF) {
-      const d = XLSX.SSF.parse_date_code(v);
-      if (d) return new Date(d.y, d.m - 1, d.d);
-    }
     if (typeof v === 'string' && v.trim() !== '') {
       const d = new Date(v);
       if (!isNaN(d)) return d;
@@ -278,10 +217,7 @@
   }
 
   function processData(json){
-    if (!json.length) {
-      showLoadError('El archivo no contiene datos.');
-      return;
-    }
+    if (!json.length) return;
 
     const sample = json[0];
     const findKey = (t) => Object.keys(sample).find(k => normalizeStr(k) === normalizeStr(t)) || t;
@@ -316,15 +252,8 @@
       });
     });
 
-    if (!rows.length) {
-      showLoadError(`No se encontraron registros que coincidan con el centro "${CENTRO_FIJO}". Revisa el archivo cargado.`);
-      return;
-    }
-
     RAW = rows;
     initFilters();
-    $('loaderScreen').classList.add('hidden');
-    $('dashboard').classList.remove('hidden');
     render();
   }
 
@@ -338,31 +267,6 @@
   function getFiltered(){
     const m = $('filterMes').value;
     return m ? RAW.filter(r => r.mesKey === m) : RAW;
-  }
-
-  // Reduce fuente/padding hasta que la tabla quepa en su contenedor sin scroll.
-  // Si no cabe ni al tamaño mínimo legible, deja scroll interno como respaldo.
-  function fitTable(wrapId, tableId, startFont, minFontIn, startPad, minPadIn){
-    const wrap = $(wrapId);
-    const table = $(tableId);
-    if (!wrap || !table) return;
-
-    let fontSize = startFont || 11, pad = startPad != null ? startPad : 4;
-    const minFont = minFontIn || 7.5, minPad = minPadIn != null ? minPadIn : 1;
-
-    const apply = () => {
-      table.style.fontSize = fontSize + 'px';
-      table.querySelectorAll('th,td').forEach(el => { el.style.padding = pad + 'px'; });
-    };
-
-    apply();
-    let guard = 0;
-    while (table.scrollHeight > wrap.clientHeight && (fontSize > minFont || pad > minPad) && guard < 60) {
-      if (pad > minPad) pad -= 0.5; else fontSize -= 0.5;
-      apply();
-      guard++;
-    }
-    wrap.style.overflowY = (table.scrollHeight > wrap.clientHeight) ? 'auto' : 'hidden';
   }
 
   function render(){
@@ -412,10 +316,6 @@
     renderTblClase(data);
     renderChartClase(data);
     renderTblVarados(data, horasVarado);
-
-    requestAnimationFrame(() => {
-      fitTable('wrapVarados', 'tblVaradosTable', 10, 6.5, 3, 1);
-    });
   }
 
   function renderDonut(prod, disp, varado, total){
@@ -511,7 +411,6 @@
       const tot = b.prod + b.disp + b.varado;
       return tot > 0 ? +(((b.prod + b.disp) / tot) * 100).toFixed(1) : 0;
     });
-    // Utilización (%) = Horas de Producción / Total Horas Registradas (de la clase) * 100
     const pctUtil = entries.map(([,b]) => {
       const tot = b.prod + b.disp + b.varado;
       return tot > 0 ? +((b.prod / tot) * 100).toFixed(1) : 0;
@@ -526,7 +425,7 @@
         datasets: [
           { type: 'bar', label: 'Hrs Varado', data: varado, backgroundColor: COLORS.varado, yAxisID: 'yHoras', order: 3 },
           { type: 'line', label: '% Disp', data: pctDisp, borderColor: COLORS.disp, backgroundColor: COLORS.disp, yAxisID: 'yPct', tension: 0.3, pointRadius: 3, borderWidth: 2, order: 1 },
-          { type: 'line', label: '% Utilización', data: pctUtil, borderColor: COLORS.purple ?? '#7C3AED', backgroundColor: '#7C3AED', yAxisID: 'yPct', tension: 0.3, pointRadius: 3, borderWidth: 2, borderDash: [4,3], order: 2 }
+          { type: 'line', label: '% Utilización', data: pctUtil, borderColor: COLORS.purple, backgroundColor: '#7C3AED', yAxisID: 'yPct', tension: 0.3, pointRadius: 3, borderWidth: 2, borderDash: [4,3], order: 2 }
         ]
       },
       options: {
@@ -568,6 +467,9 @@
       </tr>`;
     }).join('');
   }
+
+  // Carga automática al iniciar la página
+  processData(DATOS_EMBEDIDOS);
 
 })();
 </script>
