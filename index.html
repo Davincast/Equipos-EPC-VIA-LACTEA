@@ -696,5 +696,29 @@
   document.querySelectorAll('#resLegend button').forEach(b=>b.addEventListener('click',()=>{resSort=b.dataset.s;render()}));
   prep(JSON.parse($('data').textContent));
 })();
+</script><script>
+  // Al cargar la página, ocultar el cargador de archivos e iniciar el dashboard directamente
+  window.addEventListener('DOMContentLoaded', () => {
+    const loader = document.getElementById('loaderScreen');
+    const dashboard = document.getElementById('dashboard');
+
+    if (loader && dashboard) {
+      // 1. Ocultar la pantalla de carga manual
+      loader.classList.add('hidden');
+      
+      // 2. Mostrar la pantalla principal del informe
+      dashboard.classList.remove('hidden');
+
+      // 3. Disparar el evento de inicialización si existe la función global
+      if (typeof renderDashboard === 'function') {
+        renderDashboard();
+      } else {
+        // Enviar evento de cambio a los filtros para forzar la actualización de los gráficos y tablas
+        window.dispatchEvent(new Event('resize'));
+        const filterCentro = document.getElementById('filterCentro');
+        if (filterCentro) filterCentro.dispatchEvent(new Event('change'));
+      }
+    }
+  });
 </script>
 </body></html>
